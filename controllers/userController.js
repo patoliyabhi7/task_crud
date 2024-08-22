@@ -256,7 +256,7 @@ exports.createTask = catchAsync(async (req, res, next) => {
         status,
         priority,
         deadline,
-        user_id: req.user.id
+        user_id: req.user._id
     });
     if (!newTask) {
         return res.status(400).json({
@@ -269,5 +269,108 @@ exports.createTask = catchAsync(async (req, res, next) => {
         data: {
             task: newTask
         }
+    });
+});
+
+exports.getCurrentUserTask = catchAsync(async (req, res, next) => {
+    const user = await User.findById(req.user.id);
+    if (!user) {
+        return res.status(400).json({
+            message: 'User not found or not logged in'
+        })
+    }
+    const tasks = await Task.find({ user_id: req.user.id });
+    if (!tasks) {
+        return res.status(400).json({
+            message: 'No tasks found for this user'
+        });
+    }
+    res.status(200).json({
+        status: 'Tasks fetched successfully',
+        data: {
+            tasks
+        }
+    });
+});
+
+exports.getAllTasks = catchAsync(async (req, res, next) => {
+    const tasks = await Task.find();
+    if (!tasks) {
+        return res.status(400).json({
+            message: 'No tasks found'
+        });
+    }
+    res.status(200).json({
+        status: 'Tasks fetched successfully',
+        data: {
+            tasks
+        }
+    });
+});
+
+exports.updateTask = catchAsync(async (req, res, next) => {
+    const user = await User.findById(req.user.id);
+    if (!user) {
+        return res.status(400).json({
+            message: 'User not found or not logged in'
+        })
+    }
+    const task = await Task.findById(req.params.id);
+    if (!task) {
+        return res.status(400).json({
+            message: 'Task not found'
+        });
+    }
+    if (task.user_id.toString() !== req.user.id) {
+        return res.status(401).json({
+            message: 'Unauthorized request!, You are not authorized to update this task.'
+        });
+    }
+    const { title, description, status, priority, deadline } = req.body;
+    const updatedTask = await Task.findByIdAndUpdate(req.params.id, {
+        title,
+        description,
+        status,
+        priority,
+        deadline
+    }, {
+        new: true,
+        runValidators: true
+    });
+    if (!updatedTask) {
+        return res.status(400).json({
+            message: 'Error while updating task'
+        });
+    }
+
+    res.status(200).json({
+        status: 'Task updated successfully',
+        data: {
+            task: updatedTask
+        }
+    });
+});
+
+exports.deleteTask = catchAsync(async (req, res, next) => {
+    const user = await User.findById(req.user.id);
+    if (!user) {
+        return res.status(400).json({
+            message: 'User not found or not logged in'
+        })
+    }
+    const task = await Task.findById(req.params.id);
+    if (!task) {
+        return res.status(400).json({
+            message: 'Task not found'
+        });
+    }
+    if (task.user_id.toString() !== req.user.id) {
+        return res.status(401).json({
+            message: 'Unauthorized request!, You are not authorized to delete this task.'
+        });
+    }
+    await Task.findByIdAndDelete(req.params.id);
+    res.status(200).json({
+        status: 'Task deleted successfully'
     });
 });

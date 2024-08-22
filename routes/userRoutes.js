@@ -13,5 +13,9 @@ router.get("/viewProfile", userController.verifyJWT, userController.viewProfile)
 
 // Tasks
 router.post("/tasks", userController.verifyJWT, userController.createTask);
+router.get("/tasks", userController.verifyJWT, userController.getCurrentUserTask);
+router.get("/allTasks", userController.verifyJWT, userController.getAllTasks);
+router.put("/tasks/:id", userController.verifyJWT, userController.updateTask);
+router.delete("/tasks/:id", userController.verifyJWT, userController.deleteTask);
 
 module.exports = router;
