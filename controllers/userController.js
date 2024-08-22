@@ -5,6 +5,7 @@ const appError = require('./../utils/appError')
 const catchAsync = require('./../utils/catchAsync')
 const jwt = require('jsonwebtoken');
 const cookieParser = require('cookie-parser');
+const { response } = require('express')
 
 const signToken = (id) => {
     return jwt.sign({ id }, process.env.JWT_SECRET, {
@@ -27,7 +28,8 @@ const createSendToken = (user, statusCode, res) => {
     res.status(statusCode).json({
         status: 'success',
         token,
-        data: {
+        statusCode,
+        response: {
             user,
         },
     });
@@ -43,19 +45,19 @@ exports.verifyJWT = async (req, res, next) => {
         }
 
         if (!token) {
-            return res.status(401).json({ message: "User not logged in or Unauthorized request" });
+            return res.status(401).json({ statusMessage: "User not logged in or Unauthorized request", statusCode: 401 });
         }
         const decodedToken = jwt.verify(token, process.env.JWT_SECRET);
         const user = await User.findById(decodedToken.id).select("-password");
 
         if (!user) {
-            return res.status(404).json({ message: "User not found" });
+            return res.status(404).json({ statusMessage: "User not found", statusCode: 404 });
         }
 
         req.user = user;
         next();
     } catch (error) {
-        res.status(401).json({ message: "Invalid access token" });
+        res.status(401).json({ statusMessage: "Invalid access token", statusCode: 401 });
     }
 };
 
@@ -69,8 +71,9 @@ exports.register = catchAsync(async (req, res, next) => {
         gender: req.body.gender,
     })
     res.status(200).json({
-        status: 'Signup successful',
-        data: {
+        statusMessage: 'Signup successful',
+        statusCode: 200,
+        response: {
             user: newUser
         }
     })
@@ -82,7 +85,8 @@ exports.login = catchAsync(async (req, res, next) => {
         if (!email || !password) {
             return res.status(400).json({
                 status: 'Failed',
-                message: 'Please enter email and password'
+                statusCode: 400,
+                statusMessage: 'Please enter email and password'
             })
         }
         const user = await User.findOne({ email }).select('+password');
@@ -90,7 +94,8 @@ exports.login = catchAsync(async (req, res, next) => {
         if (!user || !(await user.correctPassword(password, user.password))) {
             return res.status(400).json({
                 status: 'Login failed',
-                message: 'Incorrect email or password'
+                statusCode: 400,
+                statusMessage: 'Incorrect email or password'
             })
         }
 
@@ -98,8 +103,9 @@ exports.login = catchAsync(async (req, res, next) => {
 
     } catch (error) {
         res.status(400).json({
+            statusCode: 400,
             status: 'Failed',
-            message: error.message
+            statusMessage: error.message
         })
     }
 })
@@ -109,14 +115,16 @@ exports.forgotPassword = catchAsync(async (req, res, next) => {
         if (!req.body.email) {
             return res.status(400).json({
                 status: 'Failed',
-                message: 'Please enter your email'
+                statusCode: 400,
+                statusMessage: 'Please enter your email'
             })
         }
         const user = await User.findOne({ email: req.body.email });
         if (!user) {
             return res.status(404).json({
                 status: 'Failed',
-                message: 'User not found with this email id'
+                statusCode: 404,
+                statusMessage: 'User not found with this email id'
             })
         }
         const otp = Math.floor(1000 + Math.random() * 9000);
@@ -132,20 +140,23 @@ exports.forgotPassword = catchAsync(async (req, res, next) => {
             })
             res.status(200).json({
                 status: 'Email sent successfully',
-                message: 'Password reset OTP sent to your email'
+                statusCode: 200,
+                statusMessage: 'Password reset OTP sent to your email'
             })
         } catch (error) {
             res.clearCookie('otp');
             res.status(400).json({
+                statusCode: 400,
                 status: 'Error while sending OTP',
-                message: error.message
+                statusMessage: error.message
             })
 
         }
     } catch (error) {
         res.status(400).json({
+            statusCode: 400,
             status: 'Error while resetting password',
-            message: error.message
+            statusMessage: error.message
         })
     }
 })
@@ -157,7 +168,8 @@ exports.verifyOTP = catchAsync(async (req, res, next) => {
 
         if (!otpData) {
             return res.status(400).json({
-                message: 'OTP expired or not found'
+                statusCode: 400,
+                statusMessage: 'OTP expired or not found'
             });
         }
 
@@ -166,25 +178,29 @@ exports.verifyOTP = catchAsync(async (req, res, next) => {
         const user = await User.findOne({ email: req.body.email });
         if (!user) {
             return res.status(400).json({
-                message: 'User not found with this email'
+                statusMessage: 'User not found with this email',
+                statusCode: 400
             });
         }
 
         if (!enteredOtp) {
             return res.status(400).json({
-                message: 'Please enter the OTP'
+                statusMessage: 'Please enter the OTP',
+                statusCode: 400
             });
         }
 
-        if(otpData.email !== req.body.email) {
+        if (otpData.email !== req.body.email) {
             return res.status(400).json({
-                message: 'Email does not match, unauthorized request'
+                statusMessage: 'Email does not match, unauthorized request',
+                statusCode: 400
             });
         }
 
         if (otp !== enteredOtp || email !== req.body.email) {
             return res.status(400).json({
-                message: 'OTP Incorrect or expired'
+                statusMessage: 'OTP Incorrect or expired',
+                statusCode: 400
             });
         }
 
@@ -197,7 +213,8 @@ exports.verifyOTP = catchAsync(async (req, res, next) => {
     } catch (error) {
         res.status(400).json({
             status: 'Error while verifying OTP',
-            message: error.message
+            statusCode: 400,
+            statusMessage: error.message
         });
     }
 });
@@ -207,17 +224,21 @@ exports.updatePassword = catchAsync(async (req, res, next) => {
         const user = await User.findById(req.user.id).select('+password');
         if (!user) {
             return res.status(400).json({
-                message: 'User not found or not logged in'
+                status: 'Failed',
+                statusCode: 400,
+                statusMessage: 'User not found or not logged in'
             })
         }
         if (!req.body.password || !req.body.confirmPassword || !req.body.currentPassword) {
             return res.status(400).json({
-                message: 'Please enter current, new and confirm password'
+                statusMessage: 'Please enter current, new and confirm password',
+                statusCode: 400
             })
         }
         if (!(await user.correctPassword(req.body.currentPassword, user.password))) {
             return res.status(400).json({
-                message: 'Current password is incorrect'
+                statusMessage: 'Current password is incorrect',
+                statusCode: 400
             })
         }
         user.password = req.body.password;
@@ -227,7 +248,8 @@ exports.updatePassword = catchAsync(async (req, res, next) => {
     } catch (error) {
         res.status(400).json({
             status: 'Error while updating password',
-            message: error.message
+            statusMessage: error.message,
+            statusCode: 400
         })
     }
 })
@@ -235,8 +257,9 @@ exports.updatePassword = catchAsync(async (req, res, next) => {
 exports.viewProfile = catchAsync(async (req, res, next) => {
     res.status(200).json({
         status: 'success',
-        message: 'User profile fetched successfully',
-        data: {
+        statusMessage: 'User profile fetched successfully',
+        statusCode: 200,
+        response: {
             user: req.user
         }
     });
@@ -246,7 +269,8 @@ exports.createTask = catchAsync(async (req, res, next) => {
     const user = await User.findById(req.user.id);
     if (!user) {
         return res.status(400).json({
-            message: 'User not found or not logged in'
+            statusMessage: 'User not found or not logged in',
+            statusCode: 400
         })
     }
     const { title, description, status, priority, deadline } = req.body;
@@ -260,13 +284,15 @@ exports.createTask = catchAsync(async (req, res, next) => {
     });
     if (!newTask) {
         return res.status(400).json({
-            message: 'Error while creating task'
+            statusMessage: 'Error while creating task',
+            statusCode: 400
         });
     }
 
     res.status(200).json({
-        status: 'Task created successfully',
-        data: {
+        statusMessage: 'Task created successfully',
+        statusCode: 200,
+        response: {
             task: newTask
         }
     });
@@ -276,18 +302,20 @@ exports.getCurrentUserTask = catchAsync(async (req, res, next) => {
     const user = await User.findById(req.user.id);
     if (!user) {
         return res.status(400).json({
-            message: 'User not found or not logged in'
+            statusMessage: 'User not found or not logged in',
+            statusCode: 400
         })
     }
     const tasks = await Task.find({ user_id: req.user.id });
     if (!tasks) {
         return res.status(400).json({
-            message: 'No tasks found for this user'
+            statusMessage: 'No tasks found for this user'
         });
     }
     res.status(200).json({
-        status: 'Tasks fetched successfully',
-        data: {
+        statusMessage: 'Tasks fetched successfully',
+        statusCode: 200,
+        response: {
             tasks
         }
     });
@@ -297,12 +325,14 @@ exports.getAllTasks = catchAsync(async (req, res, next) => {
     const tasks = await Task.find();
     if (!tasks) {
         return res.status(400).json({
-            message: 'No tasks found'
+            statusMessage: 'No tasks found',
+            statusCode: 400
         });
     }
     res.status(200).json({
-        status: 'Tasks fetched successfully',
-        data: {
+        statusMessage: 'Tasks fetched successfully',
+        statusCode: 200,
+        response: {
             tasks
         }
     });
@@ -312,18 +342,21 @@ exports.updateTask = catchAsync(async (req, res, next) => {
     const user = await User.findById(req.user.id);
     if (!user) {
         return res.status(400).json({
-            message: 'User not found or not logged in'
+            statusMessage: 'User not found or not logged in',
+            statusCode: 400
         })
     }
     const task = await Task.findById(req.params.id);
     if (!task) {
         return res.status(400).json({
-            message: 'Task not found'
+            statusMessage: 'Task not found',
+            statusCode: 400
         });
     }
     if (task.user_id.toString() !== req.user.id) {
         return res.status(401).json({
-            message: 'Unauthorized request!, You are not authorized to update this task.'
+            statusMessage: 'Unauthorized request!, You are not authorized to update this task.',
+            statusCode: 401
         });
     }
     const { title, description, status, priority, deadline } = req.body;
@@ -339,13 +372,15 @@ exports.updateTask = catchAsync(async (req, res, next) => {
     });
     if (!updatedTask) {
         return res.status(400).json({
-            message: 'Error while updating task'
+            statusMessage: 'Error while updating task',
+            statusCode: 400
         });
     }
 
     res.status(200).json({
-        status: 'Task updated successfully',
-        data: {
+        statusMessage: 'Task updated successfully',
+        statusCode: 200,
+        response: {
             task: updatedTask
         }
     });
@@ -355,22 +390,27 @@ exports.deleteTask = catchAsync(async (req, res, next) => {
     const user = await User.findById(req.user.id);
     if (!user) {
         return res.status(400).json({
-            message: 'User not found or not logged in'
+            status: 'Failed',
+            statusCode: 400,
+            statusMessage: 'User not found or not logged in'
         })
     }
     const task = await Task.findById(req.params.id);
     if (!task) {
         return res.status(400).json({
-            message: 'Task not found'
+            statusMessage: 'Task not found',
+            statusCode: 400
         });
     }
     if (task.user_id.toString() !== req.user.id) {
         return res.status(401).json({
-            message: 'Unauthorized request!, You are not authorized to delete this task.'
+            statusCode: 401,
+            statusMessage: 'Unauthorized request!, You are not authorized to delete this task.'
         });
     }
     await Task.findByIdAndDelete(req.params.id);
     res.status(200).json({
-        status: 'Task deleted successfully'
+        statusMessage: 'Task deleted successfully',
+        statusCode: 200
     });
 });
