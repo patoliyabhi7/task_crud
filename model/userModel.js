@@ -28,7 +28,7 @@ const userSchema = new mongoose.Schema({
     },
     confirmPassword: {
         type: String,
-        required: [true, 'Please confirm your password!'],
+        // required: [true, 'Please confirm your password!'],
         validate: {
             validator: function(el){
                 return el === this.password;
@@ -40,7 +40,11 @@ const userSchema = new mongoose.Schema({
         type: String,
         required: [true, 'Gender is required!'],
         enum: ['Male', 'Female']
-    }
+    },
+    refreshToken: {
+        type: String,
+        select: false, // Do not return this field by default in queries
+    },
 })
 
 userSchema.pre('save', async function(next){

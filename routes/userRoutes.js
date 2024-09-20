@@ -10,6 +10,8 @@ router.post("/forgotPassword", userController.forgotPassword);
 router.post("/verifyOTP", userController.verifyOTP);
 router.post("/updatePassword", userController.verifyJWT, userController.updatePassword);
 router.get("/viewProfile", userController.verifyJWT, userController.viewProfile);
+router.get("/getCurrentUser", userController.verifyJWT, userController.getCurrentUser);
+router.post("/refreshToken", userController.refreshToken);
 
 // Tasks
 router.post("/tasks", userController.verifyJWT, userController.createTask);

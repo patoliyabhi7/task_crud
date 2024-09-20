@@ -7,14 +7,25 @@ const jwt = require('jsonwebtoken');
 const cookieParser = require('cookie-parser');
 const { response } = require('express')
 
-const signToken = (id) => {
-    return jwt.sign({ id }, process.env.JWT_SECRET, {
-        expiresIn: process.env.JWT_EXPIRES_IN,
-    });
+// const signToken = (id) => {
+//     return jwt.sign({ id }, process.env.JWT_SECRET, {
+//         // expiresIn: process.env.JWT_EXPIRES_IN,
+//         expiresIn: '10s',
+//     });
+// };
+const signToken = (id, expiresIn) => {
+    return jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn });
 };
 
-const createSendToken = (user, statusCode, res) => {
-    const token = signToken(user._id);
+const createSendToken = async (user, statusCode, res) => {
+    // const token = signToken(user._id);
+    const token = signToken(user._id, '7s');
+    const refreshToken = signToken(user._id, '7d');
+
+    // Store the refresh token in the database
+    user.refreshToken = refreshToken;
+    await user.save();
+
     const cookieOptions = {
         expires: new Date(
             Date.now() + process.env.JWT_COOKIE_EXPIRES_IN * 24 * 60 * 60 * 1000
@@ -22,17 +33,80 @@ const createSendToken = (user, statusCode, res) => {
         secure: true,
         httpOnly: true,
     };
+
     res.cookie('jwt', token, cookieOptions);
+    res.cookie('refreshToken', refreshToken, {
+        httpOnly: true,
+        secure: true, // Use secure cookies in production
+        sameSite: 'Strict',
+        maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    });
 
     user.password = undefined;
     res.status(statusCode).json({
         status: 'success',
         token,
         statusCode,
+        refreshToken,
         response: {
             user,
         },
     });
+};
+
+exports.refreshToken = async (req, res) => {
+    try {
+        const refreshToken = req.cookies.refreshToken;
+        if (!refreshToken) {
+            return res.status(401).json({ statusMessage: "Refresh token not provided", statusCode: 401 });
+        }
+
+        // Verify the refresh token
+        const decoded = jwt.verify(refreshToken, process.env.JWT_SECRET);
+        const user = await User.findById(decoded.id).select('+refreshToken');
+
+        // if (!user || user.refreshToken !== refreshToken) {
+        //     return res.status(403).json({ statusMessage: "Invalid refresh token given", statusCode: 403 });
+        // }
+        if (!user) {
+            return res.status(403).json({ statusMessage: "user: Invalid refresh token given", statusCode: 403 });
+        }
+        if (user.refreshToken !== refreshToken) {
+            return res.status(403).json({ statusMessage: "refreshToken: Invalid refresh token given", statusCode: 403 });
+        }
+
+        // Generate a new access token
+        const newAccessToken = signToken(user._id, '7s');
+        const newRefreshToken = signToken(user._id, '7d');
+
+        // Store the refresh token in the database
+        user.refreshToken = newRefreshToken;
+        await user.save();
+
+        const cookieOptions = {
+            expires: new Date(
+                Date.now() + process.env.JWT_COOKIE_EXPIRES_IN * 24 * 60 * 60 * 1000
+            ),
+            secure: true,
+            httpOnly: true,
+        };
+        res.cookie('jwt', newAccessToken, cookieOptions);
+        res.cookie('refreshToken', newRefreshToken, {
+            httpOnly: true,
+            secure: true,
+            sameSite: 'Strict',
+            maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+        });
+
+        res.status(200).json({
+            status: 'success',
+            accessToken: newAccessToken,
+            refreshToken: newRefreshToken
+        });
+    } catch (error) {
+        console.log('Error:', error);
+        res.status(403).json({ error, statusMessage: "Invalid refresh token", statusCode: 403 });
+    }
 };
 
 exports.verifyJWT = async (req, res, next) => {
@@ -107,6 +181,18 @@ exports.login = catchAsync(async (req, res, next) => {
             status: 'Failed',
             statusMessage: error.message
         })
+    }
+})
+
+exports.getCurrentUser = catchAsync(async (req, res, next) => {
+    try {
+        const user = await User.findById(req.user.id).select('-password');
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+        res.status(200).json({ user });
+    } catch (error) {
+        res.status(500).json({ message: 'Server error' });
     }
 })
 
@@ -414,3 +500,4 @@ exports.deleteTask = catchAsync(async (req, res, next) => {
         statusCode: 200
     });
 });
+
